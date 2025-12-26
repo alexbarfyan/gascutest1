@@ -1,34 +1,35 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { encryptText, decryptText } from "@/lib/crypto";
+import { db } from "../../../lib/db";
+import { encrypt, decrypt } from "../../../lib/crypto";
+
+export const runtime = "nodejs";
+
+export function getOpenAIKey() {
+  const row = db.prepare("SELECT openai_key_enc FROM settings WHERE id=1").get() as any;
+  if (!row?.openai_key_enc) return "";
+  return decrypt(row.openai_key_enc);
+}
 
 export async function GET() {
-  const row = db.prepare("SELECT openai_key_enc, model, temperature FROM settings WHERE id=1").get() as any;
+  const row = db.prepare("SELECT model, temperature FROM settings WHERE id=1").get() as any;
   return NextResponse.json({
-    hasKey: !!row?.openai_key_enc,
     model: row?.model ?? "gpt-4o-mini",
     temperature: row?.temperature ?? 0.2,
+    hasKey: !!getOpenAIKey(),
   });
 }
 
 export async function POST(req: Request) {
-  const { openaiKey, model, temperature } = await req.json();
+  const body = await req.json();
+  const key = typeof body.openaiKey === "string" ? body.openaiKey.trim() : "";
+  const model = typeof body.model === "string" ? body.model : "gpt-4o-mini";
+  const temperature = typeof body.temperature === "number" ? body.temperature : 0.2;
 
-  const current = db.prepare("SELECT openai_key_enc FROM settings WHERE id=1").get() as any;
+  if (!key) return NextResponse.json({ error: "Missing openaiKey" }, { status: 400 });
 
-  const keyEnc =
-    openaiKey && openaiKey.trim().length > 0
-      ? encryptText(openaiKey.trim())
-      : current?.openai_key_enc ?? null;
-
-  db.prepare("UPDATE settings SET openai_key_enc=?, model=?, temperature=? WHERE id=1")
-    .run(keyEnc, model ?? "gpt-4o-mini", typeof temperature === "number" ? temperature : 0.2);
+  db.prepare(
+    "UPDATE settings SET openai_key_enc=?, model=?, temperature=? WHERE id=1"
+  ).run(encrypt(key), model, temperature);
 
   return NextResponse.json({ ok: true });
-}
-
-export function getOpenAIKey(): string | null {
-  const row = db.prepare("SELECT openai_key_enc FROM settings WHERE id=1").get() as any;
-  if (!row?.openai_key_enc) return null;
-  return decryptText(row.openai_key_enc);
 }
