@@ -1,51 +1,51 @@
-import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth"; // must exist in your project
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import pdf from "pdf-parse";
 import mammoth from "mammoth";
 
-export const runtime = "nodejs";
+export async function POST(req: NextRequest) {
+  try {
+    requireAdmin(req);
 
-export async function POST(req: Request) {
-  // ✅ admin-only
-  await requireAdmin(req);
+    const form = await req.formData();
+    const file = form.get("file") as File | null;
 
-  const form = await req.formData();
-  const file = form.get("file") as File | null;
-  if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    if (!file) {
+      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    }
 
-  const buf = Buffer.from(await file.arrayBuffer());
-  const name = file.name.toLowerCase();
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const filename = file.name.toLowerCase();
 
-  let text = "";
+    let text = "";
 
-  if (name.endsWith(".pdf")) {
-    const out = await pdf(buf);
-    text = out.text || "";
-  } else if (name.endsWith(".docx")) {
-    const out = await mammoth.extractRawText({ buffer: buf });
-    text = out.value || "";
-  } else {
-    // .txt or fallback
-    text = buf.toString("utf8");
+    if (filename.endsWith(".pdf")) {
+      const parsed = await pdf(bytes);
+      text = parsed.text || "";
+    } else if (filename.endsWith(".docx")) {
+      const result = await mammoth.extractRawText({ buffer: bytes });
+      text = result.value || "";
+    } else if (filename.endsWith(".txt")) {
+      text = bytes.toString("utf-8");
+    } else {
+      return NextResponse.json(
+        { error: "Supported: PDF, DOCX, TXT" },
+        { status: 400 }
+      );
+    }
+
+    // store “the” current document as row id=1 conceptually (we just keep newest row)
+    db.prepare(
+      `INSERT INTO documents (name, content, updated_at) VALUES (?, ?, ?)`
+    ).run(file.name, text, new Date().toISOString());
+
+    return NextResponse.json({ ok: true, name: file.name, length: text.length });
+  } catch (e: any) {
+    if (e?.message === "FORBIDDEN_ADMIN") {
+      return NextResponse.json({ error: "Admin only" }, { status: 403 });
+    }
+    console.error(e);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
-
-  if (!text.trim()) {
-    return NextResponse.json({ error: "Could not extract text from file." }, { status: 400 });
-  }
-
-  // ✅ store permanently (DB) as “current doc”
-  await db.setting.upsert({
-    where: { key: "CURRENT_DOC_TEXT" },
-    update: { value: text },
-    create: { key: "CURRENT_DOC_TEXT", value: text },
-  });
-
-  await db.setting.upsert({
-    where: { key: "CURRENT_DOC_NAME" },
-    update: { value: file.name },
-    create: { key: "CURRENT_DOC_NAME", value: file.name },
-  });
-
-  return NextResponse.json({ ok: true, name: file.name });
 }
