@@ -1,15 +1,18 @@
-import { NextRequest } from "next/server";
+// lib/auth.ts
+import { NextResponse } from "next/server";
 
-export function getRole(req: NextRequest): "admin" | "staff" | null {
-  // Super simple role read: cookie named "role"
-  const role = req.cookies.get("role")?.value;
-  if (role === "admin" || role === "staff") return role;
+export async function requireAdmin(req: Request) {
+  // TODO: replace with your real auth check
+  const role = req.headers.get("x-role"); // example
+  if (role !== "admin") return NextResponse.json({ error: "Admin only" }, { status: 403 });
   return null;
 }
 
-export function requireAdmin(req: NextRequest) {
-  const role = getRole(req);
-  if (role !== "admin") {
-    throw new Error("FORBIDDEN_ADMIN");
+export async function requireStaff(req: Request) {
+  // allow staff OR admin
+  const role = req.headers.get("x-role");
+  if (role !== "staff" && role !== "admin") {
+    return NextResponse.json({ error: "Staff only" }, { status: 403 });
   }
+  return null;
 }
