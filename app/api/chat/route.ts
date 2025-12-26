@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { blobToF32, cosine } from "@/lib/text";
-import { getOpenAIKey } from "@/app/api/settings/route";
+import { db } from "../../../lib/db";
+import { blobToF32, cosine } from "../../../lib/text";
+import { getOpenAIKey } from "../settings/route";
 import OpenAI from "openai";
 
 export const runtime = "nodejs";
