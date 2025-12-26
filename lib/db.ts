@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   openai_key_enc TEXT,
   model TEXT DEFAULT 'gpt-4o-mini',
-  temperature REAL DEFAULT 0.2
+  temperature REAL DEFAULT 0.2,
+  active_doc_id INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS documents (
@@ -30,3 +31,10 @@ CREATE TABLE IF NOT EXISTS chunks (
 `);
 
 db.prepare(`INSERT OR IGNORE INTO settings (id) VALUES (1)`).run();
+
+// migrate older DBs that don't have active_doc_id yet
+try {
+  db.prepare("SELECT active_doc_id FROM settings WHERE id=1").get();
+} catch {
+  db.exec("ALTER TABLE settings ADD COLUMN active_doc_id INTEGER;");
+}
