@@ -2,6 +2,12 @@
 
 import { useState } from "react";
 
+const [role, setRole] = useState<"admin" | "staff" | "unknown">("unknown");
+
+useEffect(() => {
+  fetch("/api/me").then(r => r.json()).then(d => setRole(d.role ?? "unknown"));
+}, []);
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [uploadMsg, setUploadMsg] = useState("");
