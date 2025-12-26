@@ -6,6 +6,17 @@ import OpenAI from "openai";
 import pdf from "pdf-parse";
 import mammoth from "mammoth";
 import { jwtVerify } from "jose";
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth"; // or wherever your auth helper is
+
+export async function POST(req: Request) {
+  const session = await getSession(req);
+  if (!session || session.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // ...rest of your route
+}
 
 export const runtime = "nodejs";
 
