@@ -5,8 +5,20 @@ import { getOpenAIKey } from "@/app/api/settings/route";
 import OpenAI from "openai";
 import pdf from "pdf-parse";
 import mammoth from "mammoth";
+import { jwtVerify } from "jose";
 
 export const runtime = "nodejs";
+
+async function requireAdmin(req: Request) {
+  const cookie = req.headers.get("cookie") || "";
+  const match = cookie.match(/(?:^|;\s*)session=([^;]+)/);
+  const token = match?.[1];
+  if (!token) throw new Error("Not authenticated");
+
+  const secret = new TextEncoder().encode(process.env.APP_SECRET || "");
+  const { payload } = await jwtVerify(token, secret);
+  if (payload.role !== "admin") throw new Error("Forbidden");
+}
 
 async function fileToText(file: File) {
   const name = file.name.toLowerCase();
@@ -24,6 +36,12 @@ async function fileToText(file: File) {
 }
 
 export async function POST(req: Request) {
+  try {
+    await requireAdmin(req);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || "Forbidden" }, { status: 403 });
+  }
+
   const key = getOpenAIKey();
   if (!key) return NextResponse.json({ error: "Set OpenAI key in Settings first." }, { status: 400 });
 
@@ -36,9 +54,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "File unreadable or too short." }, { status: 400 });
   }
 
-  // single-doc simplicity: wipe previous
-  db.exec("DELETE FROM chunks; DELETE FROM documents;");
-
+  // NEW: do NOT delete old documents/chunks. We add a new doc and mark it active.
   const doc = db.prepare("INSERT INTO documents (name, created_at) VALUES (?, ?)").run(
     file.name,
     new Date().toISOString()
@@ -46,11 +62,10 @@ export async function POST(req: Request) {
   const docId = Number(doc.lastInsertRowid);
 
   const openai = new OpenAI({ apiKey: key });
+  const chunks = chunkText(text, 900, 150).slice(0, 200);
 
-  const chunks = chunkText(text, 900, 150).slice(0, 200); // cap cost
   const insert = db.prepare("INSERT INTO chunks (doc_id, content, embedding) VALUES (?, ?, ?)");
 
-  // Embed in batches
   const batchSize = 50;
   for (let i = 0; i < chunks.length; i += batchSize) {
     const batch = chunks.slice(i, i + batchSize);
@@ -65,5 +80,8 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, chunks: chunks.length });
+  // Mark this doc as the shared active doc
+  db.prepare("UPDATE settings SET active_doc_id=? WHERE id=1").run(docId);
+
+  return NextResponse.json({ ok: true, docId, chunks: chunks.length });
 }
