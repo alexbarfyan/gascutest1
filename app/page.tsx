@@ -8,6 +8,15 @@ useEffect(() => {
   fetch("/api/me").then(r => r.json()).then(d => setRole(d.role ?? "unknown"));
 }, []);
 
+{role === "admin" ? (
+  <section>...upload UI...</section>
+) : (
+  <section style={{ marginTop: 16, padding: 12, border: "1px solid #ddd", borderRadius: 8 }}>
+    <h2>Upload Document</h2>
+    <p>Only the admin can upload/replace the shared document.</p>
+  </section>
+)}
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [uploadMsg, setUploadMsg] = useState("");
