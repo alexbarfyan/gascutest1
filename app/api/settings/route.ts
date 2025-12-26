@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server";
 import { db } from "../../../lib/db";
 import { encrypt, decrypt } from "../../../lib/crypto";
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth"; // or wherever your auth helper is
+
+export async function POST(req: Request) {
+  const session = await getSession(req);
+  if (!session || session.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // ...rest of your route
+}
 
 export const runtime = "nodejs";
 
