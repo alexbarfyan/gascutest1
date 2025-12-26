@@ -100,4 +100,10 @@ function AdminUpload() {
     <div style={{ border: "1px solid #ddd", padding: 16, borderRadius: 8 }}>
       <h3>Admin: Upload policy document</h3>
       <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-      <button onClick={upload} style={{ marginTop: 8, padding
+      <button
+  onClick={upload}
+  style={{ marginTop: 8, padding: 8 }}
+>
+  Upload
+</button>
+
