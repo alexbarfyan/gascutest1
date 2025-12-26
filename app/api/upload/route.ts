@@ -6,7 +6,6 @@ import OpenAI from "openai";
 import pdf from "pdf-parse";
 import mammoth from "mammoth";
 import { jwtVerify } from "jose";
-import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth"; // or wherever your auth helper is
 
 export async function POST(req: Request) {
