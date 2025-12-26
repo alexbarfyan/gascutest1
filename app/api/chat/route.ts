@@ -25,6 +25,8 @@ export async function POST(req: Request) {
   }
 
   const openai = new OpenAI({ apiKey: key });
+  const key = process.env.OPENAI_API_KEY;
+
 
   const q = await openai.embeddings.create({
     model: "text-embedding-3-small",
