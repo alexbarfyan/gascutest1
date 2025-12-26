@@ -15,26 +15,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing message" }, { status: 400 });
   }
 
-  const settings = db.prepare("SELECT model, temperature FROM settings WHERE id=1").get() as any;
+  const settings = db.prepare("SELECT model, temperature, active_doc_id FROM settings WHERE id=1").get() as any;
   const model = settings?.model ?? "gpt-4o-mini";
   const temperature = settings?.temperature ?? 0.2;
+  const activeDocId = settings?.active_doc_id ?? null;
+
+  if (!activeDocId) {
+    return NextResponse.json({ reply: "No shared document uploaded yet. Ask the admin to upload one." });
+  }
 
   const openai = new OpenAI({ apiKey: key });
 
-  // embed question
   const q = await openai.embeddings.create({
     model: "text-embedding-3-small",
     input: message,
   });
   const qVec = new Float32Array(q.data[0].embedding);
 
-  // load chunks
-  const rows = db.prepare("SELECT content, embedding FROM chunks").all() as any[];
+  const rows = db.prepare("SELECT content, embedding FROM chunks WHERE doc_id=?").all(activeDocId) as any[];
   if (!rows.length) {
-    return NextResponse.json({ reply: "No document uploaded yet. Upload one first." });
+    return NextResponse.json({ reply: "Active document has no indexed chunks. Ask admin to re-upload." });
   }
 
-  // rank by cosine similarity (simple, ok for <= 200 chunks)
   const scored = rows
     .map((r) => {
       const v = blobToF32(r.embedding as Buffer);
