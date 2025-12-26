@@ -6,104 +6,143 @@ type Role = "admin" | "staff" | "unknown";
 
 export default function Page() {
   const [role, setRole] = useState<Role>("unknown");
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<string>("");
+
+  // Upload (admin)
+  const [file, setFile] = useState<File | null>(null);
+
+  // Chat (staff)
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<{ who: "you" | "bot"; text: string }[]>([]);
 
   useEffect(() => {
     fetch("/api/me")
       .then((r) => r.json())
-      .then((d) => setRole((d.role as Role) ?? "unknown"))
-      .finally(() => setLoading(false));
+      .then((d) => setRole((d?.role as Role) ?? "unknown"))
+      .catch(() => setRole("unknown"));
   }, []);
 
-  if (loading) return <div style={{ padding: 24 }}>Loading…</div>;
-
-  return (
-    <div style={{ padding: 24, fontFamily: "system-ui" }}>
-      <h1>Dashboard</h1>
-      <div style={{ marginBottom: 12 }}>Role: {role}</div>
-
-      {role === "admin" && (
-        <div style={{ display: "grid", gap: 16, maxWidth: 720 }}>
-          <AdminSettings />
-          <AdminUpload />
-          <StaffChat />
-        </div>
-      )}
-
-      {role === "staff" && (
-        <div style={{ maxWidth: 720 }}>
-          <StaffChat />
-        </div>
-      )}
-
-      {role === "unknown" && (
-        <div>
-          Not logged in. <a href="/login">Go to login</a>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** ADMIN: store OpenAI key (server will use it) */
-function AdminSettings() {
-  const [key, setKey] = useState("");
-  const [msg, setMsg] = useState("");
-
-  async function save() {
-    setMsg("");
-    const r = await fetch("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openaiKey: key }),
-    });
-    const d = await r.json().catch(() => ({}));
-    setMsg(r.ok ? "Saved." : `Error: ${d.error ?? r.status}`);
+  async function logout() {
+    setStatus("");
+    await fetch("/api/logout", { method: "POST" });
+    window.location.href = "/login";
   }
-
-  return (
-    <div style={{ border: "1px solid #ddd", padding: 16, borderRadius: 8 }}>
-      <h3>Admin: OpenAI Key</h3>
-      <p>Paste the OpenAI API key here (only admins can save it).</p>
-      <input
-        type="password"
-        value={key}
-        onChange={(e) => setKey(e.target.value)}
-        placeholder="sk-..."
-        style={{ width: "100%", padding: 8 }}
-      />
-      <button onClick={save} style={{ marginTop: 8, padding: "8px 12px" }}>
-        Save key
-      </button>
-      {msg && <div style={{ marginTop: 8 }}>{msg}</div>}
-    </div>
-  );
-}
-
-/** ADMIN: upload/replace the knowledge document */
-function AdminUpload() {
-  const [file, setFile] = useState<File | null>(null);
-  const [msg, setMsg] = useState("");
 
   async function upload() {
-    if (!file) return;
-    setMsg("Uploading...");
-    const fd = new FormData();
-    fd.append("file", file);
+    setStatus("");
+    if (!file) {
+      setStatus("Pick a file first.");
+      return;
+    }
 
-    const r = await fetch("/api/upload", { method: "POST", body: fd });
-    const d = await r.json().catch(() => ({}));
-    setMsg(r.ok ? "Uploaded & indexed." : `Error: ${d.error ?? r.status}`);
+    const form = new FormData();
+    form.append("file", file);
+
+    const res = await fetch("/api/upload", { method: "POST", body: form });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      setStatus(data?.error || "Upload failed.");
+      return;
+    }
+    setStatus("✅ Document uploaded. Staff can now chat with it.");
+    setFile(null);
+  }
+
+  async function send() {
+    setStatus("");
+    const text = input.trim();
+    if (!text) return;
+
+    setInput("");
+    setMessages((m) => [...m, { who: "you", text }]);
+
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      setMessages((m) => [...m, { who: "bot", text: `❌ ${data?.error || "Chat failed."}` }]);
+      return;
+    }
+
+    setMessages((m) => [...m, { who: "bot", text: data?.answer || "(no answer returned)" }]);
   }
 
   return (
-    <div style={{ border: "1px solid #ddd", padding: 16, borderRadius: 8 }}>
-      <h3>Admin: Upload policy document</h3>
-      <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-      <button
-  onClick={upload}
-  style={{ marginTop: 8, padding: 8 }}
->
-  Upload
-</button>
+    <main style={{ padding: 24, fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial" }}>
+      <h1 style={{ fontSize: 34, fontWeight: 700, marginBottom: 8 }}>Dashboard</h1>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 6 }}>Role: <b>{role}</b></div>
+        <button onClick={logout} style={{ padding: 8, cursor: "pointer" }}>
+          Logout
+        </button>
+      </div>
 
+      {status ? (
+        <div style={{ marginBottom: 16, padding: 10, border: "1px solid #ddd" }}>{status}</div>
+      ) : null}
+
+      {role === "admin" ? (
+        <section style={{ border: "1px solid #ddd", padding: 16 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 10 }}>Admin: Upload policy document</h2>
+          <input
+            type="file"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+          <div style={{ marginTop: 10 }}>
+            <button onClick={upload} style={{ padding: 8, cursor: "pointer" }}>
+              Upload
+            </button>
+          </div>
+          <p style={{ marginTop: 10, color: "#555" }}>
+            Upload replaces the current document. Staff will chat against the latest uploaded doc.
+          </p>
+        </section>
+      ) : null}
+
+      {role === "staff" ? (
+        <section style={{ border: "1px solid #ddd", padding: 16 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 10 }}>Staff: Chat with the policy</h2>
+
+          <div style={{ height: 280, overflow: "auto", border: "1px solid #eee", padding: 10, marginBottom: 10 }}>
+            {messages.length === 0 ? (
+              <div style={{ color: "#777" }}>Ask a question about the policy…</div>
+            ) : (
+              messages.map((m, i) => (
+                <div key={i} style={{ marginBottom: 10 }}>
+                  <b>{m.who === "you" ? "You" : "Bot"}:</b> {m.text}
+                </div>
+              ))
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") send();
+              }}
+              placeholder="Type your question…"
+              style={{ flex: 1, padding: 8 }}
+            />
+            <button onClick={send} style={{ padding: 8, cursor: "pointer" }}>
+              Send
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {role === "unknown" ? (
+        <div style={{ marginTop: 16, color: "#777" }}>
+          If you just logged in and this stays “unknown”, refresh once. If it still happens, your `/api/me` route isn’t returning a role.
+        </div>
+      ) : null}
+    </main>
+  );
+}
